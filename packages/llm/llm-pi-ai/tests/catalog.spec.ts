@@ -1149,8 +1149,22 @@ describe('compat switches', () => {
     })).toThrow(/compat "supportsDevelperRole", which no wire protocol declares; the configurable switches are .*\bsupportsDeveloperRole\b/)
   })
 
+  it('accepts OpenRouter provider routing on an openai-completions route', () => {
+    const routing = { only: ['deepseek'], allow_fallbacks: false }
+    const models = resolveProfiles({
+      'or-pinned': {
+        api: 'openai-completions',
+        baseURL: 'https://openrouter.test/api/v1',
+        compat: { openRouterRouting: routing },
+        models: [{ id: 'deepseek/deepseek-v4-pro-0813' }],
+      },
+    }).get('or-pinned')?.piProvider?.getModels() ?? []
+
+    expect(models[0]?.compat).toEqual({ openRouterRouting: routing })
+  })
+
   it('refuses compat keys pi-ai’s catalog owns, pointing at the catalog route', () => {
-    for (const compat of [{ openRouterRouting: {} }, { supportsAdditionalTools: true }]) {
+    for (const compat of [{ vercelGatewayRouting: {} }, { supportsAdditionalTools: true }]) {
       expect(() => resolveProfiles({
         'acme-gateway': {
           api: 'openai-completions',

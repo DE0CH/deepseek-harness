@@ -214,6 +214,8 @@ What neither sets keeps the installed catalog's value for that model, and what t
 
 Each switch belongs to the protocols that declare it, so a switch valid on one `api` may be refused on another — the message names what that protocol does offer. Like `input` above, a switch states a claim about your endpoint rather than checking it: setting one your gateway does not actually need simply sends a different request.
 
+An OpenAI Chat Completions route that reaches OpenRouter can pin the serving providers with `compat.openRouterRouting`, which is sent as the request's `provider` object; for example `openRouterRouting: {only: [deepseek], allow_fallbacks: false}` keeps every request on DeepSeek's own endpoint. OpenRouter still applies the account's and key's data-policy guardrails, and a request no allowed endpoint can serve fails with HTTP 404.
+
 Every switch, its accepted values, and the protocols that take it are listed under `PiAiCompatProfile` in the [generated `dsh-llm-pi-ai` configuration reference](../../config-catalog.md#deepseek-aidsh-llm-pi-ai) — which is derived from the source, so it cannot fall behind what the adapter accepts.
 
 ## Troubleshooting

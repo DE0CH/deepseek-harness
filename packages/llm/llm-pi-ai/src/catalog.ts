@@ -265,7 +265,7 @@ const COMPLETIONS_COMPAT_GATE = {
   supportsStrictMode: 'offer',
   cacheControlFormat: 'offer',
   supportsLongCacheRetention: 'offer',
-  openRouterRouting: 'withhold',
+  openRouterRouting: 'offer',
   vercelGatewayRouting: 'withhold',
   zaiToolStream: 'withhold',
   supportsOpenAIGrammarTools: 'withhold',

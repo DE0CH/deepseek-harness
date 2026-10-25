@@ -214,6 +214,8 @@ DeepSeek 将省略的 `inputModalities` 视为纯文本，并拒绝空列表。�
 
 每个开关归属于声明了它的那些协议，因此在某个 `api` 上合法的开关，在另一个上可能被拒绝——报错会点名该协议实际提供哪些。与上面的 `input` 一样，开关陈述的是关于你的端点的一个断言，而不是对它的检查：设置一个网关其实并不需要的开关，只是发出一个不同的请求而已。
 
+连接 OpenRouter 的 OpenAI Chat Completions 路由可以用 `compat.openRouterRouting` 固定提供服务的供应商，它作为请求的 `provider` 对象发送；例如 `openRouterRouting: {only: [deepseek], allow_fallbacks: false}` 让每个请求都留在 DeepSeek 自己的端点上。OpenRouter 仍会应用账户与密钥的数据策略护栏，没有任何允许的端点能提供服务的请求会以 HTTP 404 失败。
+
 全部开关、各自接受的取值，以及接受它们的协议，都列在[生成的 `dsh-llm-pi-ai` 配置参考](../../config-catalog.zh.md#deepseek-aidsh-llm-pi-ai)的 `PiAiCompatProfile` 之下——该参考派生自源码，因此不会落后于适配器实际接受的内容。
 
 ## 排错
