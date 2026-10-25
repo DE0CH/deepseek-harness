@@ -12,6 +12,7 @@ const DEFAULT_PROJECT_ROOT_MARKERS = ['.git'] as const
 const DEFAULT_INSTRUCTION_FILE_CANDIDATES = ['AGENTS.md', 'CLAUDE.md'] as const
 const DEFAULT_LOCAL_INSTRUCTION_FILE_CANDIDATES = ['AGENTS.local.md', 'CLAUDE.local.md'] as const
 const DEFAULT_MAX_SOURCE_BYTES = 1_048_576
+const DEFAULT_MAX_IMPORT_DEPTH = 5
 const RESERVED_PATH_SEGMENTS = new Set(['', '.', '..'])
 
 /** User-facing workspace instruction loader configuration. */
@@ -36,6 +37,13 @@ export interface Config {
    * under the same per-directory trimmed-content dedup; empty disables the overlay.
    */
   localInstructionFileCandidates?: string[]
+  /**
+   * Inline Claude Code style `@path` imports: each import token in a loaded
+   * file is replaced by the imported file's content, read under `maxSourceBytes`.
+   */
+  expandImports?: boolean
+  /** Maximum nested import hops below a loaded instruction file. */
+  maxImportDepth?: number
 }
 
 export const Config: z<Config> = z.object({
@@ -44,6 +52,8 @@ export const Config: z<Config> = z.object({
   maxSourceBytes: z.number().step(1).min(1).default(DEFAULT_MAX_SOURCE_BYTES),
   instructionFileCandidates: z.array(z.string()).default([...DEFAULT_INSTRUCTION_FILE_CANDIDATES]),
   localInstructionFileCandidates: z.array(z.string()).default([...DEFAULT_LOCAL_INSTRUCTION_FILE_CANDIDATES]),
+  expandImports: z.boolean().default(false),
+  maxImportDepth: z.number().step(1).min(0).default(DEFAULT_MAX_IMPORT_DEPTH),
 })
 
 /** Normalized instruction discovery configuration. */
@@ -59,6 +69,8 @@ export interface ResolvedDiscoveryConfig {
 export interface ResolvedConfig extends ResolvedDiscoveryConfig {
   maxBytes: number
   maxSourceBytes: number
+  expandImports: boolean
+  maxImportDepth: number
 }
 
 /**
@@ -80,6 +92,8 @@ export function workspaceBaselineIdentity(
     maxSourceBytes: config.maxSourceBytes,
     instructionFileCandidates: config.instructionFileCandidates,
     localInstructionFileCandidates: config.localInstructionFileCandidates,
+    // Present only when enabled, so baselines recorded without imports keep their identity.
+    ...config.expandImports ? { expandImports: true, maxImportDepth: config.maxImportDepth } : {},
   })
 }
 
@@ -100,6 +114,8 @@ export function resolveConfig(config: Config): ResolvedConfig {
     }),
     maxBytes: config.maxBytes,
     maxSourceBytes: config.maxSourceBytes ?? DEFAULT_MAX_SOURCE_BYTES,
+    expandImports: config.expandImports ?? false,
+    maxImportDepth: config.maxImportDepth ?? DEFAULT_MAX_IMPORT_DEPTH,
   }
 }
 

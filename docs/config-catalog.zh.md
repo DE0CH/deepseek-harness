@@ -77,7 +77,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-agent-instructions`
 
 - `inject`: `agents` · `workingDirectory`
-- `source`: [`packages/context/agent-instructions/src/config.ts:18`](../packages/context/agent-instructions/src/config.ts)
+- `source`: [`packages/context/agent-instructions/src/config.ts:19`](../packages/context/agent-instructions/src/config.ts)
 
 ```ts config-catalog
 /** User-facing workspace instruction loader configuration. */
@@ -102,6 +102,13 @@ export interface Config {
    * under the same per-directory trimmed-content dedup; empty disables the overlay.
    */
   localInstructionFileCandidates?: string[]
+  /**
+   * Inline Claude Code style `@path` imports: each import token in a loaded
+   * file is replaced by the imported file's content, read under `maxSourceBytes`.
+   */
+  expandImports?: boolean
+  /** Maximum nested import hops below a loaded instruction file. */
+  maxImportDepth?: number
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-agent-instructions -->

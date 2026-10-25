@@ -5,6 +5,7 @@
  */
 
 import { createReadStream } from 'node:fs'
+import { homedir } from 'node:os'
 import { stat } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import type { FileSystem, FsInfo, FsTarget, FsVersion } from '@deepseek-ai/dsh-fs'
@@ -12,6 +13,7 @@ import { agentsHomeDisplay, dshHomeDisplay } from '@deepseek-ai/dsh-home-paths'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { resolveConfig, resolveDiscoveryConfig, type ResolvedConfig, type ResolvedDiscoveryConfig } from './config.ts'
 import { trimmedInstructionDigest } from './digest.ts'
+import { expandInstructionImports } from './imports.ts'
 import {
   AGENTS_GLOBAL_DIRECTORY,
   decodeScopeKey,
@@ -104,6 +106,8 @@ function userGlobalRoots(config: ResolvedDiscoveryConfig): UserGlobalRoot[] {
 interface LoadOptions extends DiscoverOptions {
   maxBytes: number
   maxSourceBytes?: number
+  expandImports?: boolean
+  maxImportDepth?: number
   replacePreviousBaseline?: boolean
 }
 
@@ -416,6 +420,46 @@ async function readBounded(
   }
 }
 
+/** Import settings applied to every file one load reads. */
+export interface InstructionImportOptions {
+  /** Inline `@path` imports; false returns file content unchanged. */
+  expandImports: boolean
+  /** Maximum nested import hops. */
+  maxImportDepth: number
+}
+
+/**
+ * Inline the `@path` imports of one read instruction file when enabled.
+ * Import targets go through the same provider and per-file source cap as
+ * instruction candidates; an absent, non-file, or oversized target stays as text.
+ * @param content - the file's text.
+ * @param absolutePath - the file's absolute path.
+ * @param imports - whether and how deep to expand.
+ * @param maxSourceBytes - per-target UTF-8 byte cap.
+ * @param fileSystem - optional provider used instead of host reads.
+ * @param signal - cancellation for target reads.
+ * @returns the expanded text, or the original text when expansion is off.
+ */
+async function withImports(
+  content: string,
+  absolutePath: string,
+  imports: InstructionImportOptions | undefined,
+  maxSourceBytes: number,
+  fileSystem?: FileSystem,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (imports?.expandImports !== true) return content
+  return expandInstructionImports(content, absolutePath, {
+    maxDepth: imports.maxImportDepth,
+    homeDir: homedir(),
+    read: async (path) => {
+      const probe = await statFile(path, fileSystem, signal)
+      if (probe.kind !== 'present') return undefined
+      return readBounded({ absolutePath: path, ...probe.info }, maxSourceBytes, fileSystem, signal)
+    },
+  })
+}
+
 /**
  * Drop later candidates whose trimmed content duplicates an earlier candidate in
  * the same candidate group. Different groups never collapse even when identical;
@@ -476,8 +520,9 @@ export async function loadBaselineInstructionSet(
   const discovered = await discoverInstructionFiles(options, fileSystem)
   const loaded: LoadedInstructionFile[] = []
   for (const file of discovered) {
-    const content = await readBounded(file, config.maxSourceBytes, fileSystem, options.signal)
-    if (content !== undefined) {
+    const raw = await readBounded(file, config.maxSourceBytes, fileSystem, options.signal)
+    if (raw !== undefined) {
+      const content = await withImports(raw, file.absolutePath, config, config.maxSourceBytes, fileSystem, options.signal)
       loaded.push({
         absolutePath: file.absolutePath,
         displayPath: file.displayPath,
@@ -583,6 +628,7 @@ export async function probeScopeInstruction(
  * @param maxSourceBytes - maximum UTF-8 bytes accepted from the source.
  * @param fileSystem - provider used for the streaming read.
  * @param signal - cancellation for provider streaming.
+ * @param imports - `@path` import expansion applied to the read content.
  * @returns loaded content with the probed version, or undefined when unavailable.
  */
 export async function readScopeInstruction(
@@ -590,13 +636,14 @@ export async function readScopeInstruction(
   maxSourceBytes: number,
   fileSystem: FileSystem,
   signal?: AbortSignal,
+  imports?: InstructionImportOptions,
 ): Promise<LoadedInstructionFile | undefined> {
-  const content = await readBounded(file, maxSourceBytes, fileSystem, signal)
-  if (content === undefined) return undefined
+  const raw = await readBounded(file, maxSourceBytes, fileSystem, signal)
+  if (raw === undefined) return undefined
   return {
     absolutePath: file.absolutePath,
     displayPath: file.displayPath,
-    content,
+    content: await withImports(raw, file.absolutePath, imports, maxSourceBytes, fileSystem, signal),
     version: file.version,
   }
 }

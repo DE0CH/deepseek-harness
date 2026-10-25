@@ -620,6 +620,137 @@ describe('workspace context instruction discovery', () => {
     }
   })
 
+  describe('@path imports', () => {
+    async function importRepo(files: Record<string, string>): Promise<{ root: string; home: string }> {
+      const root = await tempRepo()
+      const home = await tempRepo()
+      await mkdir(join(root, '.git'), { recursive: true })
+      for (const [path, body] of Object.entries(files)) {
+        await mkdir(dirname(join(root, path)), { recursive: true })
+        await write(join(root, path), body)
+      }
+      pinHarnessHome(home)
+      return { root, home }
+    }
+
+    async function cleanup(...dirs: string[]): Promise<void> {
+      vi.unstubAllEnvs()
+      for (const dir of dirs) await rm(dir, { recursive: true, force: true })
+    }
+
+    it('leaves @path tokens as text unless expandImports is set', async () => {
+      const { root, home } = await importRepo({ 'CLAUDE.md': 'top\n@lessons.md', 'lessons.md': 'LESSON BODY' })
+      try {
+        const loaded = await loadBaselineInstructions({ cwd: root, maxBytes: 65536 })
+        expect(loaded?.text).toContain('@lessons.md')
+        expect(loaded?.text).not.toContain('LESSON BODY')
+      } finally {
+        await cleanup(root, home)
+      }
+    })
+
+    it('inlines relative imports, nested ones relative to the importing file', async () => {
+      const { root, home } = await importRepo({
+        'CLAUDE.md': '# Workspace\n\n@repo/CLAUDE.md\n',
+        'repo/CLAUDE.md': 'repo rules\n@lessons.md',
+        'repo/lessons.md': 'LESSON BODY',
+      })
+      try {
+        const loaded = await loadBaselineInstructions({ cwd: root, maxBytes: 65536, expandImports: true })
+        expect(loaded?.text).toContain('repo rules\nLESSON BODY')
+        expect(loaded?.text).not.toContain('@repo/CLAUDE.md')
+      } finally {
+        await cleanup(root, home)
+      }
+    })
+
+    it('skips code spans, fenced blocks, mid-word @, missing targets and cycles', async () => {
+      const { root, home } = await importRepo({
+        'CLAUDE.md': [
+          'span `@a.md` stays',
+          '```',
+          '@a.md',
+          '```',
+          'mail me@a.md',
+          'gone @missing.md',
+          '@a.md',
+        ].join('\n'),
+        'a.md': 'A BODY @CLAUDE.md',
+      })
+      try {
+        const text = (await loadBaselineInstructions({ cwd: root, maxBytes: 65536, expandImports: true }))?.text ?? ''
+        expect(text).toContain('span `@a.md` stays')
+        expect(text).toContain('```\n@a.md\n```')
+        expect(text).toContain('mail me@a.md')
+        expect(text).toContain('gone @missing.md')
+        expect(text).toContain('A BODY @CLAUDE.md')
+        expect(text.match(/A BODY/g)).toHaveLength(1)
+      } finally {
+        await cleanup(root, home)
+      }
+    })
+
+    it('resolves @~/ and absolute imports, keeps trailing punctuation, ignores a bare @ and other fences', async () => {
+      const { root, home } = await importRepo({ 'abs.md': 'ABS BODY' })
+      const userHome = await tempRepo()
+      vi.stubEnv('HOME', userHome)
+      try {
+        await write(join(userHome, 'home.md'), 'HOME BODY')
+        await write(join(root, 'CLAUDE.md'), [
+          '(see @~/home.md),',
+          `@${join(root, 'abs.md')}`,
+          'lonely @ sign',
+          '```',
+          '~~~',
+          '@abs.md',
+          '```',
+        ].join('\n'))
+        const text = (await loadBaselineInstructions({ cwd: root, maxBytes: 65536, expandImports: true }))?.text ?? ''
+        expect(text).toContain('(see HOME BODY),')
+        expect(text).toContain('ABS BODY')
+        expect(text).toContain('lonely @ sign')
+        expect(text).toContain('~~~\n@abs.md\n```')
+      } finally {
+        await cleanup(root, home, userHome)
+      }
+    })
+
+    it('expands imports in the plugin baseline and in a reconciled replacement', async () => {
+      const { root, home } = await importRepo({ 'AGENTS.md': 'rule\n@more.md', 'more.md': 'MORE BODY' })
+      try {
+        const ctx = new Context()
+        provideWorkingDirectoryFixture(ctx)
+        pinHarnessHome(home)
+        await mountFileToolsAndAgentInstructions(ctx, { maxBytes: 65536, expandImports: true })
+        const agent = await stubAgent(root)
+        const prefix = await composeBaselinePrefix(ctx, agent)
+        expect(JSON.stringify(prefix)).toContain('rule\\nMORE BODY')
+
+        await write(join(root, 'AGENTS.md'), 'new rule\n@more.md')
+        await syncAgentInstructions(ctx, agent)
+        expect(blocksText((await agentInstructionsOf(agent))?.content)).toContain('new rule\nMORE BODY')
+      } finally {
+        await cleanup(root, home)
+      }
+    })
+
+    it('stops at maxImportDepth', async () => {
+      const { root, home } = await importRepo({ 'CLAUDE.md': '@one.md', 'one.md': 'ONE @two.md', 'two.md': 'TWO' })
+      try {
+        const text = (await loadBaselineInstructions({
+          cwd: root,
+          maxBytes: 65536,
+          expandImports: true,
+          maxImportDepth: 1,
+        }))?.text ?? ''
+        expect(text).toContain('ONE @two.md')
+        expect(text).not.toContain('TWO')
+      } finally {
+        await cleanup(root, home)
+      }
+    })
+  })
+
   it('follows a symlinked instruction file through ctx.fs to its target content', async () => {
     const root = await tempRepo()
     const home = await tempRepo()
