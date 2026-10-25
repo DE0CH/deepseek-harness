@@ -1,0 +1,53 @@
+# DE0CH fork: the Jarvis 4 runtime bundle (de0ch/runtime-bundle.sh) on every push to main, published on release
+# `de0ch-<first 12 characters of the commit>` as `dsh-runtime-linux-x64.tar.gz`; then DE0CH/jarvis4 is asked to pin it
+# (its .github/workflows/fork-pin.yml -> session-image/dsh-runtime.json, by sha256), so the next session image runs
+# this commit in every `dsh` session. Upstream's own workflows are disabled in this fork.
+name: de0ch-dsh-runtime
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: de0ch-dsh-runtime
+  cancel-in-progress: true
+
+jobs:
+  bundle:
+    # Ubuntu 24.04 = the session image's OS (native modules link against its glibc)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+      - name: Install
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+      - name: Fork tests
+        run: pnpm exec vitest run packages/context/agent-instructions packages/llm/llm-pi-ai
+      - name: Bundle
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          de0ch/runtime-bundle.sh "$RUNNER_TEMP/out"
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="de0ch-${GITHUB_SHA::12}"
+          gh release create "$tag" "$RUNNER_TEMP/out/dsh-runtime-linux-x64.tar.gz" --target "$GITHUB_SHA" \
+            --title "$tag" --notes "Jarvis 4 runtime bundle from $GITHUB_SHA" --prerelease
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+      - name: Pin in jarvis4
+        # JARVIS4_DISPATCH_TOKEN: fine-grained PAT jarvis4-dispatch-dsh, Actions write on DE0CH/jarvis4 only
+        env:
+          GH_TOKEN: ${{ secrets.JARVIS4_DISPATCH_TOKEN }}
+        run: |
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/dsh-runtime-linux-x64.tar.gz"
+          gh workflow run fork-pin.yml -R DE0CH/jarvis4 --ref main -f name=dsh -f "url=$url" -f "sha=$GITHUB_SHA"
