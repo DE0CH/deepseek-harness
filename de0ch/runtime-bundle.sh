@@ -24,12 +24,18 @@ B="$WORK/bundle"; mkdir -p "$B/app"
 python3 - "$B/app/package.json" "$WORK"/npm "$WORK"/npm-vendor "$WORK"/npm-landlock <<'PY'
 import glob, json, os, sys, tarfile
 out, dirs = sys.argv[1], sys.argv[2:]
+def fits(rule, value):  # npm's os/cpu rule: allow-list, or "!x" deny entries
+    if not rule: return True
+    allow = [r for r in rule if not r.startswith("!")]
+    return value not in [r[1:] for r in rule if r.startswith("!")] and (not allow or value in allow)
 deps = {}
 for d in dirs:
     for t in sorted(glob.glob(os.path.join(d, "*.tgz"))):
         with tarfile.open(t) as tf:
-            name = json.load(tf.extractfile("package/package.json"))["name"]
-        deps[name] = "file:" + t
+            pkg = json.load(tf.extractfile("package/package.json"))
+        # foreign-platform builds (darwin, win32, arm64) stay out, as in upstream's release:verify-packed-install
+        if fits(pkg.get("os"), "linux") and fits(pkg.get("cpu"), "x64"):
+            deps[pkg["name"]] = "file:" + t
 json.dump({"name": "dsh-jarvis4-runtime", "version": "0.0.0", "private": True, "dependencies": deps}, open(out, "w"), indent=1)
 PY
 # --install-links copies the tarballs' contents (no links back into $WORK); optional = foreign-platform builds
