@@ -269,6 +269,8 @@ const compatProfile: z<PiAiCompatProfile> = z.object({
   thinkingFormat: z.union(SUPPORTED_THINKING_FORMATS),
   chatTemplateKwargs: z.dict(chatTemplateKwarg),
   chatTemplateArgs: z.dict(chatTemplateKwarg),
+  // pi-ai validates the routing fields against OpenRouter's schema when it builds the request.
+  openRouterRouting: z.dict(z.any()) as z<NonNullable<PiAiCompatProfile['openRouterRouting']>>,
   supportsThinkingTokenBudget: z.boolean(),
   thinkingTokenBudgetField: z.union(THINKING_TOKEN_BUDGET_FIELDS),
   vllmPriority: z.number().step(1),
