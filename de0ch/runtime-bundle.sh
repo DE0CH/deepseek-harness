@@ -38,8 +38,9 @@ for d in dirs:
             deps[pkg["name"]] = "file:" + t
 json.dump({"name": "dsh-jarvis4-runtime", "version": "0.0.0", "private": True, "dependencies": deps}, open(out, "w"), indent=1)
 PY
-# --install-links copies the tarballs' contents (no links back into $WORK); optional = foreign-platform builds
-( cd "$B/app" && npm install --install-links --no-audit --no-fund --package-lock=false --omit=optional --omit=dev )
+# --install-links copies the tarballs' contents (no links back into $WORK). Optional dependencies stay: they hold the
+# native addons' linux-x64 builds (npm skips the other platforms' by itself)
+( cd "$B/app" && npm install --install-links --no-audit --no-fund --package-lock=false --omit=dev )
 "$B/app/node_modules/.bin/dsh" --version
 
 curl -fsSL "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-x64.tar.xz" -o "$WORK/node.tar.xz"
