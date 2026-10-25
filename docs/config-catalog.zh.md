@@ -2065,7 +2065,10 @@ export interface PiAiCompatProfile {
   chatTemplateKwargs?: NonNullable<OpenAICompletionsCompat['chatTemplateKwargs']>
   /** Arguments sent as `chat_template_args` under the `baseten` thinking format; `openai-completions`. */
   chatTemplateArgs?: NonNullable<OpenAICompletionsCompat['chatTemplateArgs']>
-  /** OpenRouter provider routing, sent as the request's `provider` object (e.g. `{only: [deepseek], allow_fallbacks: false}`); `openai-completions`. */
+  /**
+   * OpenRouter provider routing, sent as the request's `provider` object
+   * (e.g. `{only: [deepseek], allow_fallbacks: false}`); `openai-completions`.
+   */
   openRouterRouting?: NonNullable<OpenAICompletionsCompat['openRouterRouting']>
   /** Alias for `thinkingTokenBudgetField: "thinking_token_budget"`; an explicit field wins. `openai-completions`. */
   supportsThinkingTokenBudget?: boolean
