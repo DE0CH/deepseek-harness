@@ -5,8 +5,8 @@
 name: de0ch-dsh-runtime
 
 on:
-  push:
-    branches: [main]
+  push:  # every branch (the gate merges a branch when this is green); main alone publishes
+    branches: ['**']
   workflow_dispatch:
 
 permissions:
@@ -37,6 +37,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/out"
           de0ch/runtime-bundle.sh "$RUNNER_TEMP/out"
       - name: Release
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -45,6 +46,7 @@ jobs:
             --title "$tag" --notes "Jarvis 4 runtime bundle from $GITHUB_SHA" --prerelease
           echo "TAG=$tag" >> "$GITHUB_ENV"
       - name: Pin in jarvis4
+        if: github.ref == 'refs/heads/main'
         # JARVIS4_DISPATCH_TOKEN: fine-grained PAT jarvis4-dispatch-dsh, Actions write on DE0CH/jarvis4 only
         env:
           GH_TOKEN: ${{ secrets.JARVIS4_DISPATCH_TOKEN }}
